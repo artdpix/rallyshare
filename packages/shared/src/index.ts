@@ -9,9 +9,9 @@ export const SubmissionInputSchema = z.object({
   type: SubmissionTypeSchema,
   contributorName: z.string().max(80).optional(),
   contributorEmail: z.string().email().optional(),
-  anonymous: z.boolean().default(true),
-  consent: z.literal(true),
-  turnstileToken: z.string().min(1),
+  anonymous: z.coerce.boolean().default(true),
+  consent: z.coerce.boolean().refine((v) => v === true, 'consent required'),
+  turnstileToken: z.string().optional(),
 });
 export type SubmissionInput = z.infer<typeof SubmissionInputSchema>;
 

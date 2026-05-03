@@ -52,23 +52,24 @@ export default async function Home() {
         )}
       </section>
 
-      <button
-        type="button"
-        disabled
+      <a
+        href={event ? '/submit' : '#'}
+        aria-disabled={!event}
         style={{
           background: 'var(--accent)',
           color: 'white',
-          border: 'none',
-          padding: '0.9rem 1rem',
+          textDecoration: 'none',
+          textAlign: 'center',
+          padding: '1rem',
           borderRadius: 10,
           fontSize: '1rem',
           fontWeight: 600,
-          opacity: 0.6,
-          cursor: 'not-allowed',
+          opacity: event ? 1 : 0.5,
+          pointerEvents: event ? 'auto' : 'none',
         }}
       >
-        Submeter (em breve)
-      </button>
+        Submeter foto ou vídeo
+      </a>
     </main>
   );
 }
