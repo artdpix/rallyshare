@@ -1,0 +1,142 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Event {
+  id          String       @id @default(cuid())
+  slug        String       @unique
+  name        String
+  startsAt    DateTime
+  endsAt      DateTime
+  active      Boolean      @default(false)
+  stages      Stage[]
+  submissions Submission[]
+  createdAt   DateTime     @default(now())
+}
+
+model Stage {
+  id          String       @id @default(cuid())
+  eventId     String
+  event       Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  slug        String
+  name        String
+  order       Int
+  scheduledAt DateTime?
+  submissions Submission[]
+
+  @@unique([eventId, slug])
+  @@index([eventId, order])
+}
+
+enum SubmissionType {
+  photo
+  video
+}
+
+enum SubmissionStatus {
+  uploading
+  processing
+  pending
+  approved
+  rejected
+  aired
+}
+
+model Submission {
+  id               String           @id @default(cuid())
+  eventId          String
+  event            Event            @relation(fields: [eventId], references: [id])
+  stageId          String?
+  stage            Stage?           @relation(fields: [stageId], references: [id])
+  type             SubmissionType
+  contributorName  String?
+  contributorEmail String?
+  anonymous        Boolean          @default(true)
+  consentAt        DateTime
+  ipHash           String
+  deviceFp         String?
+  status           SubmissionStatus @default(uploading)
+  nsfwFlag         Boolean          @default(false)
+  pHash            String?
+  durationSeconds  Int?
+  width            Int?
+  height           Int?
+  assets           MediaAsset[]
+  moderationLog    ModerationLog[]
+  vmixDispatches   VmixDispatch[]
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([eventId, status])
+  @@index([pHash])
+}
+
+enum AssetRole {
+  raw
+  processed
+  thumb
+}
+
+model MediaAsset {
+  id           String     @id @default(cuid())
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  role         AssetRole
+  storageKey   String
+  mime         String
+  bytes        BigInt
+  width        Int?
+  height       Int?
+  createdAt    DateTime   @default(now())
+
+  @@index([submissionId, role])
+}
+
+enum ModerationAction {
+  approve
+  reject
+  flag
+}
+
+model ModerationLog {
+  id            String           @id @default(cuid())
+  submissionId  String
+  submission    Submission       @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  operatorEmail String
+  action        ModerationAction
+  reason        String?
+  createdAt     DateTime         @default(now())
+
+  @@index([submissionId])
+}
+
+enum DispatchMethod {
+  api
+  hotfolder
+}
+
+enum DispatchStatus {
+  queued
+  sent
+  failed
+  retrying
+}
+
+model VmixDispatch {
+  id           String         @id @default(cuid())
+  submissionId String
+  submission   Submission     @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  method       DispatchMethod
+  status       DispatchStatus @default(queued)
+  attempts     Int            @default(0)
+  lastError    String?
+  sentAt       DateTime?
+  createdAt    DateTime       @default(now())
+
+  @@index([status])
+}

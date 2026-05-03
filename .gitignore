@@ -1,0 +1,24 @@
+node_modules
+dist
+.next
+.turbo
+*.log
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea
+
+# Prisma generated
+packages/db/generated
+
+# Media (dev)
+media/
+
+# OS
+.DS_Store
+Thumbs.db

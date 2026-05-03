@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: rally
+      POSTGRES_PASSWORD: rally
+      POSTGRES_DB: rally
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rally"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  syncthing:
+    image: syncthing/syncthing
+    restart: unless-stopped
+    hostname: rally-sync
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+    ports:
+      - "8384:8384"        # Web UI
+      - "22000:22000/tcp"  # Sync TCP
+      - "22000:22000/udp"  # Sync QUIC
+      - "21027:21027/udp"  # Discovery
+    volumes:
+      - syncthing-config:/var/syncthing/config
+      - ./media:/var/syncthing/Sync
+
+volumes:
+  pgdata:
+  redisdata:
+  syncthing-config:
