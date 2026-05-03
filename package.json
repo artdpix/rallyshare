@@ -7,6 +7,7 @@
     "build": "pnpm -r build",
     "db:generate": "pnpm --filter @rally/db generate",
     "db:migrate": "pnpm --filter @rally/db migrate",
+    "db:seed": "pnpm --filter @rally/db seed",
     "db:studio": "pnpm --filter @rally/db studio",
     "infra:up": "docker compose up -d",
     "infra:down": "docker compose down",
