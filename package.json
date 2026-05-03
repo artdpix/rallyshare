@@ -1,0 +1,22 @@
+{
+  "name": "rallyshare",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --parallel --stream -r dev",
+    "build": "pnpm -r build",
+    "db:generate": "pnpm --filter @rally/db generate",
+    "db:migrate": "pnpm --filter @rally/db migrate",
+    "db:studio": "pnpm --filter @rally/db studio",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "infra:logs": "docker compose logs -f"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  },
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
