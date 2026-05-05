@@ -144,6 +144,16 @@ export function AdminClient({ apiUrl }: { apiUrl: string }) {
     return () => clearInterval(t);
   }, [fetchList, token]);
 
+  const removeFromList = useCallback((id: string) => {
+    setItems((prev) => {
+      const idx = prev.findIndex((i) => i.id === id);
+      const next = prev.filter((i) => i.id !== id);
+      const nextSel = next[idx] ?? next[idx - 1] ?? null;
+      setSelectedId(nextSel?.id ?? null);
+      return next;
+    });
+  }, []);
+
   const moderate = useCallback(
     async (action: 'approve' | 'reject') => {
       if (!selected || busy || !token) return;
@@ -165,22 +175,39 @@ export function AdminClient({ apiUrl }: { apiUrl: string }) {
           return;
         }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        // optimistic: remove from local list and pick next
-        setItems((prev) => {
-          const idx = prev.findIndex((i) => i.id === selected.id);
-          const next = prev.filter((i) => i.id !== selected.id);
-          const nextSel = next[idx] ?? next[idx - 1] ?? null;
-          setSelectedId(nextSel?.id ?? null);
-          return next;
-        });
+        removeFromList(selected.id);
       } catch (e) {
         setErr(e instanceof Error ? e.message : 'erro a moderar');
       } finally {
         setBusy(false);
       }
     },
-    [apiUrl, selected, busy, token, handle401],
+    [apiUrl, selected, busy, token, handle401, removeFromList],
   );
+
+  const remove = useCallback(async () => {
+    if (!selected || busy || !token) return;
+    if (!window.confirm('Apagar definitivamente este envio? Esta acção não se pode desfazer.')) {
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetch(`${apiUrl}/admin/submissions/${selected.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.status === 401) {
+        handle401();
+        return;
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      removeFromList(selected.id);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'erro a apagar');
+    } finally {
+      setBusy(false);
+    }
+  }, [apiUrl, selected, busy, token, handle401, removeFromList]);
 
   const logout = useCallback(() => {
     localStorage.removeItem('rally.adminToken');
@@ -445,8 +472,45 @@ export function AdminClient({ apiUrl }: { apiUrl: string }) {
               </>
             )}
 
-            <div style={{ marginTop: 'auto', color: 'var(--muted)', fontSize: '0.75rem' }}>
-              Atalhos: <kbd>J</kbd>/<kbd>K</kbd> navegar · <kbd>A</kbd> aprovar · <kbd>R</kbd> rejeitar
+            {previewAsset && (
+              <a
+                href={`${apiUrl}/media/${previewAsset.storageKey}?t=${encodeURIComponent(token)}&download=1`}
+                style={{
+                  ...styles.btn,
+                  background: 'transparent',
+                  color: 'var(--fg)',
+                  border: '1px solid var(--border)',
+                  textDecoration: 'none',
+                  textAlign: 'center',
+                  display: 'block',
+                }}
+              >
+                Descarregar
+              </a>
+            )}
+
+            <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <button
+                onClick={remove}
+                disabled={busy}
+                style={{
+                  background: 'transparent',
+                  color: '#fca5a5',
+                  border: '1px solid #6e1f1f',
+                  padding: '0.6rem 0.85rem',
+                  borderRadius: 8,
+                  fontSize: '0.85rem',
+                  cursor: busy ? 'not-allowed' : 'pointer',
+                  opacity: busy ? 0.5 : 1,
+                  width: '100%',
+                }}
+              >
+                Apagar definitivamente
+              </button>
+
+              <div style={{ color: 'var(--muted)', fontSize: '0.75rem' }}>
+                Atalhos: <kbd>J</kbd>/<kbd>K</kbd> navegar · <kbd>A</kbd> aprovar · <kbd>R</kbd> rejeitar
+              </div>
             </div>
           </>
         ) : (

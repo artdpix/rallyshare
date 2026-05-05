@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   NotFoundException,
   Param,
@@ -18,6 +19,7 @@ import {
 } from '@rally/db';
 import type { Response } from 'express';
 import { existsSync } from 'fs';
+import { unlink } from 'fs/promises';
 import { join, normalize, resolve } from 'path';
 import { AdminGuard } from './admin.guard';
 import { MEDIA_ROOT } from './config';
@@ -122,10 +124,36 @@ export class AdminController {
     return { id: updated.id, status: updated.status };
   }
 
+  @Delete('admin/submissions/:id')
+  async remove(@Param('id') id: string) {
+    const sub = await prisma.submission.findUnique({
+      where: { id },
+      include: { assets: true },
+    });
+    if (!sub) throw new NotFoundException('submission not found');
+
+    for (const asset of sub.assets) {
+      const safe = normalize(asset.storageKey);
+      const fullPath = resolve(join(MEDIA_ROOT, safe));
+      if (!fullPath.startsWith(resolve(MEDIA_ROOT))) continue;
+      try {
+        await unlink(fullPath);
+      } catch (err) {
+        console.warn(`[admin] could not delete ${fullPath}:`, (err as Error).message);
+      }
+    }
+
+    // cascades delete assets, moderationLog, vmixDispatches via Prisma onDelete
+    await prisma.submission.delete({ where: { id } });
+
+    return { id, deleted: true };
+  }
+
   @Get('media/:role/:filename')
   serveMedia(
     @Param('role') role: string,
     @Param('filename') filename: string,
+    @Query('download') download: string | undefined,
     @Res() res: Response,
   ) {
     if (!ALLOWED_ROLES.has(role)) throw new NotFoundException();
@@ -136,6 +164,13 @@ export class AdminController {
     const fullPath = resolve(join(MEDIA_ROOT, role, safe));
     if (!fullPath.startsWith(resolve(MEDIA_ROOT))) throw new NotFoundException();
     if (!existsSync(fullPath)) throw new NotFoundException();
+
+    if (download) {
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${safe}"`,
+      );
+    }
     res.sendFile(fullPath);
   }
 }
