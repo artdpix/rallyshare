@@ -24,11 +24,26 @@ export default async function Home() {
         gap: '1.5rem',
       }}
     >
-      <header>
-        <h1 style={{ margin: 0, fontSize: '1.75rem' }}>RallyShare</h1>
-        <p style={{ color: 'var(--muted)', margin: '0.25rem 0 0' }}>
-          Envia as tuas fotos e clips para a transmissão.
-        </p>
+      <header style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem' }}>
+        <div style={{ flex: 1 }}>
+          <h1 style={{ margin: 0, fontSize: '1.75rem' }}>RallyShare</h1>
+          <p style={{ color: 'var(--muted)', margin: '0.25rem 0 0' }}>
+            Envia as tuas fotos e clips para a transmissão.
+          </p>
+        </div>
+        <a
+          href="/admin"
+          style={{
+            color: 'var(--muted)',
+            fontSize: '0.8rem',
+            textDecoration: 'none',
+            border: '1px solid var(--border)',
+            padding: '0.4rem 0.7rem',
+            borderRadius: 6,
+          }}
+        >
+          Régie
+        </a>
       </header>
 
       <section

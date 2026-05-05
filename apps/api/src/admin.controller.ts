@@ -1,0 +1,136 @@
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  NotFoundException,
+  Param,
+  Post,
+  Query,
+  Res,
+} from '@nestjs/common';
+import {
+  prisma,
+  SubmissionStatus,
+  ModerationAction,
+  AssetRole,
+} from '@rally/db';
+import type { Response } from 'express';
+import { existsSync } from 'fs';
+import { join, normalize, resolve } from 'path';
+import { MEDIA_ROOT } from './config';
+
+const ALLOWED_ROLES = new Set(['raw', 'processed', 'thumb']);
+const VALID_LIST_STATUSES = new Set<string>([
+  'pending',
+  'approved',
+  'rejected',
+  'aired',
+]);
+
+// TODO: replace with Cloudflare Access JWT email when added in Sprint 2
+const OPERATOR_EMAIL_PLACEHOLDER = 'operator@local';
+
+@Controller()
+export class AdminController {
+  @Get('admin/submissions')
+  async list(@Query('status') status: string | undefined) {
+    const where: { status?: SubmissionStatus } = {};
+    if (status) {
+      if (!VALID_LIST_STATUSES.has(status)) {
+        throw new BadRequestException(`invalid status: ${status}`);
+      }
+      where.status = status as SubmissionStatus;
+    } else {
+      where.status = SubmissionStatus.pending;
+    }
+
+    const items = await prisma.submission.findMany({
+      where,
+      orderBy: { createdAt: 'asc' },
+      include: {
+        stage: { select: { id: true, name: true, order: true } },
+        assets: {
+          where: { role: AssetRole.raw },
+          select: { storageKey: true, mime: true, bytes: true },
+          take: 1,
+        },
+      },
+      take: 100,
+    });
+
+    return items.map((s) => ({
+      id: s.id,
+      type: s.type,
+      status: s.status,
+      stage: s.stage,
+      contributorName: s.contributorName,
+      contributorEmail: s.contributorEmail,
+      anonymous: s.anonymous,
+      nsfwFlag: s.nsfwFlag,
+      createdAt: s.createdAt,
+      asset: s.assets[0]
+        ? {
+            storageKey: s.assets[0].storageKey,
+            mime: s.assets[0].mime,
+            bytes: Number(s.assets[0].bytes),
+          }
+        : null,
+    }));
+  }
+
+  @Post('admin/submissions/:id/moderate')
+  async moderate(
+    @Param('id') id: string,
+    @Body() body: { action: 'approve' | 'reject'; reason?: string },
+  ) {
+    if (body.action !== 'approve' && body.action !== 'reject') {
+      throw new BadRequestException('action must be approve or reject');
+    }
+
+    const submission = await prisma.submission.findUnique({ where: { id } });
+    if (!submission) throw new NotFoundException('submission not found');
+
+    const newStatus =
+      body.action === 'approve' ? SubmissionStatus.approved : SubmissionStatus.rejected;
+
+    const [updated] = await prisma.$transaction([
+      prisma.submission.update({
+        where: { id },
+        data: { status: newStatus },
+      }),
+      prisma.moderationLog.create({
+        data: {
+          submissionId: id,
+          operatorEmail: OPERATOR_EMAIL_PLACEHOLDER,
+          action:
+            body.action === 'approve'
+              ? ModerationAction.approve
+              : ModerationAction.reject,
+          reason: body.reason ?? null,
+        },
+      }),
+    ]);
+
+    // TODO: on approve, enqueue copy-to-sync-folder job + vMix dispatch (next iteration)
+
+    return { id: updated.id, status: updated.status };
+  }
+
+  @Get('media/:role/:filename')
+  serveMedia(
+    @Param('role') role: string,
+    @Param('filename') filename: string,
+    @Res() res: Response,
+  ) {
+    if (!ALLOWED_ROLES.has(role)) throw new NotFoundException();
+    const safe = normalize(filename);
+    if (safe.includes('..') || safe.includes('/') || safe.includes('\\')) {
+      throw new NotFoundException();
+    }
+    const fullPath = resolve(join(MEDIA_ROOT, role, safe));
+    if (!fullPath.startsWith(resolve(MEDIA_ROOT))) throw new NotFoundException();
+    if (!existsSync(fullPath)) throw new NotFoundException();
+    res.sendFile(fullPath);
+  }
+}
