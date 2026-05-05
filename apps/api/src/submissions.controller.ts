@@ -16,6 +16,7 @@ import { mkdirSync } from 'fs';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
 import { IP_HASH_SALT, MAX_UPLOAD_BYTES, MEDIA_ROOT } from './config';
+import { transcodeQueue } from './queue';
 
 const RAW_DIR = join(MEDIA_ROOT, 'raw');
 mkdirSync(RAW_DIR, { recursive: true });
@@ -107,7 +108,7 @@ export class SubmissionsController {
         anonymous: input.anonymous,
         consentAt: new Date(),
         ipHash: hashIp(clientIp(req)),
-        status: SubmissionStatus.pending,
+        status: SubmissionStatus.processing,
         assets: {
           create: {
             role: AssetRole.raw,
@@ -118,6 +119,8 @@ export class SubmissionsController {
         },
       },
     });
+
+    await transcodeQueue.add('transcode', { submissionId: submission.id });
 
     return {
       id: submission.id,

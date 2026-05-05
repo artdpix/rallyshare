@@ -54,32 +54,34 @@ export class AdminController {
       include: {
         stage: { select: { id: true, name: true, order: true } },
         assets: {
-          where: { role: AssetRole.raw },
-          select: { storageKey: true, mime: true, bytes: true },
-          take: 1,
+          select: { role: true, storageKey: true, mime: true, bytes: true },
         },
       },
       take: 100,
     });
 
-    return items.map((s) => ({
-      id: s.id,
-      type: s.type,
-      status: s.status,
-      stage: s.stage,
-      contributorName: s.contributorName,
-      contributorEmail: s.contributorEmail,
-      anonymous: s.anonymous,
-      nsfwFlag: s.nsfwFlag,
-      createdAt: s.createdAt,
-      asset: s.assets[0]
-        ? {
-            storageKey: s.assets[0].storageKey,
-            mime: s.assets[0].mime,
-            bytes: Number(s.assets[0].bytes),
-          }
-        : null,
-    }));
+    return items.map((s) => {
+      const assets: Record<string, { storageKey: string; mime: string; bytes: number }> = {};
+      for (const a of s.assets) {
+        assets[a.role] = {
+          storageKey: a.storageKey,
+          mime: a.mime,
+          bytes: Number(a.bytes),
+        };
+      }
+      return {
+        id: s.id,
+        type: s.type,
+        status: s.status,
+        stage: s.stage,
+        contributorName: s.contributorName,
+        contributorEmail: s.contributorEmail,
+        anonymous: s.anonymous,
+        nsfwFlag: s.nsfwFlag,
+        createdAt: s.createdAt,
+        assets,
+      };
+    });
   }
 
   @Post('admin/submissions/:id/moderate')

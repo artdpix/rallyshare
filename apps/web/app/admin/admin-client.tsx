@@ -15,7 +15,7 @@ type Submission = {
   anonymous: boolean;
   nsfwFlag: boolean;
   createdAt: string;
-  asset: Asset | null;
+  assets: Partial<Record<'raw' | 'processed' | 'thumb', Asset>>;
 };
 
 type Tab = 'pending' | 'approved' | 'rejected';
@@ -216,10 +216,17 @@ export function AdminClient({ apiUrl }: { apiUrl: string }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [items, tab, moderate]);
 
-  const mediaUrl =
-    selected?.asset && token
-      ? `${apiUrl}/media/${selected.asset.storageKey}?t=${encodeURIComponent(token)}`
-      : null;
+  function mediaSrc(key: string | undefined) {
+    if (!key || !token) return null;
+    return `${apiUrl}/media/${key}?t=${encodeURIComponent(token)}`;
+  }
+
+  const previewAsset = selected
+    ? selected.assets.processed ?? selected.assets.raw ?? null
+    : null;
+  const previewUrl = mediaSrc(previewAsset?.storageKey);
+  const previewMime = previewAsset?.mime ?? '';
+  const previewIsVideo = previewMime.startsWith('video/');
 
   if (!token) return null;
 
@@ -262,55 +269,97 @@ export function AdminClient({ apiUrl }: { apiUrl: string }) {
             sem itens
           </div>
         ) : (
-          items.map((s) => (
-            <div
-              key={s.id}
-              onClick={() => setSelectedId(s.id)}
-              style={{
-                ...styles.card,
-                background: s.id === selectedId ? '#1f2024' : 'transparent',
-                borderLeft:
-                  s.id === selectedId ? '3px solid var(--accent)' : '3px solid transparent',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <span
+          items.map((s) => {
+            const thumbUrl = mediaSrc(s.assets.thumb?.storageKey);
+            const sizeBytes = s.assets.processed?.bytes ?? s.assets.raw?.bytes;
+            return (
+              <div
+                key={s.id}
+                onClick={() => setSelectedId(s.id)}
+                style={{
+                  ...styles.card,
+                  flexDirection: 'row',
+                  alignItems: 'stretch',
+                  gap: '0.6rem',
+                  background: s.id === selectedId ? '#1f2024' : 'transparent',
+                  borderLeft:
+                    s.id === selectedId ? '3px solid var(--accent)' : '3px solid transparent',
+                }}
+              >
+                <div
                   style={{
-                    fontSize: '0.7rem',
-                    padding: '0.1rem 0.4rem',
+                    width: 72,
+                    height: 54,
+                    flexShrink: 0,
+                    background: '#0b0b0c',
                     borderRadius: 4,
-                    background: s.type === 'video' ? '#1e3a8a' : '#065f46',
-                    color: 'white',
+                    overflow: 'hidden',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '0.7rem',
+                    color: 'var(--muted)',
                   }}
                 >
-                  {s.type}
-                </span>
-                {s.nsfwFlag && (
-                  <span
+                  {thumbUrl ? (
+                    <img
+                      src={thumbUrl}
+                      alt=""
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  ) : (
+                    '…'
+                  )}
+                </div>
+                <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    <span
+                      style={{
+                        fontSize: '0.65rem',
+                        padding: '0.1rem 0.35rem',
+                        borderRadius: 4,
+                        background: s.type === 'video' ? '#1e3a8a' : '#065f46',
+                        color: 'white',
+                      }}
+                    >
+                      {s.type}
+                    </span>
+                    {s.nsfwFlag && (
+                      <span
+                        style={{
+                          fontSize: '0.65rem',
+                          padding: '0.1rem 0.35rem',
+                          borderRadius: 4,
+                          background: '#7f1d1d',
+                          color: 'white',
+                        }}
+                      >
+                        NSFW?
+                      </span>
+                    )}
+                    <span style={{ marginLeft: 'auto', color: 'var(--muted)', fontSize: '0.7rem' }}>
+                      {timeAgo(s.createdAt)}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {s.stage?.name ?? <span style={{ color: 'var(--muted)' }}>sem PEC</span>}
+                  </div>
+                  <div
                     style={{
+                      color: 'var(--muted)',
                       fontSize: '0.7rem',
-                      padding: '0.1rem 0.4rem',
-                      borderRadius: 4,
-                      background: '#7f1d1d',
-                      color: 'white',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
                     }}
                   >
-                    NSFW?
-                  </span>
-                )}
-                <span style={{ marginLeft: 'auto', color: 'var(--muted)', fontSize: '0.75rem' }}>
-                  {timeAgo(s.createdAt)}
-                </span>
+                    {s.anonymous ? 'anónimo' : s.contributorName ?? s.contributorEmail ?? 'sem nome'}
+                    {sizeBytes !== undefined ? ` · ${formatBytes(sizeBytes)}` : ''}
+                  </div>
+                </div>
               </div>
-              <div style={{ fontSize: '0.9rem' }}>
-                {s.stage?.name ?? <span style={{ color: 'var(--muted)' }}>sem PEC</span>}
-              </div>
-              <div style={{ color: 'var(--muted)', fontSize: '0.75rem' }}>
-                {s.anonymous ? 'anónimo' : s.contributorName ?? s.contributorEmail ?? 'sem nome'}
-                {s.asset ? ` · ${formatBytes(s.asset.bytes)}` : ''}
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </aside>
 
@@ -323,11 +372,11 @@ export function AdminClient({ apiUrl }: { apiUrl: string }) {
           padding: '1rem',
         }}
       >
-        {selected && mediaUrl ? (
-          selected.type === 'video' ? (
+        {selected && previewUrl ? (
+          previewIsVideo ? (
             <video
               key={selected.id}
-              src={mediaUrl}
+              src={previewUrl}
               controls
               autoPlay
               muted
@@ -336,7 +385,7 @@ export function AdminClient({ apiUrl }: { apiUrl: string }) {
           ) : (
             <img
               key={selected.id}
-              src={mediaUrl}
+              src={previewUrl}
               alt=""
               style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
             />
@@ -366,7 +415,10 @@ export function AdminClient({ apiUrl }: { apiUrl: string }) {
               <div style={{ color: 'var(--muted)', fontSize: '0.75rem' }}>Tipo / tamanho</div>
               <div>
                 {selected.type}
-                {selected.asset ? ` · ${formatBytes(selected.asset.bytes)}` : ''}
+                {previewAsset ? ` · ${formatBytes(previewAsset.bytes)}` : ''}
+                {selected.assets.processed ? '' : (
+                  <span style={{ color: 'var(--muted)', fontSize: '0.75rem' }}> · raw</span>
+                )}
               </div>
             </div>
             <div>

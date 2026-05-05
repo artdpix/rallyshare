@@ -37,7 +37,8 @@ log "2/9  Utilitários do sistema"
 apt-get install -y --no-install-recommends \
     ca-certificates curl gnupg lsb-release \
     git vim htop tmux jq unzip rsync \
-    ufw build-essential openssh-server
+    ufw build-essential openssh-server \
+    ffmpeg
 
 systemctl enable --now ssh
 
