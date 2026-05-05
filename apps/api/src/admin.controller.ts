@@ -8,6 +8,7 @@ import {
   Post,
   Query,
   Res,
+  UseGuards,
 } from '@nestjs/common';
 import {
   prisma,
@@ -18,6 +19,7 @@ import {
 import type { Response } from 'express';
 import { existsSync } from 'fs';
 import { join, normalize, resolve } from 'path';
+import { AdminGuard } from './admin.guard';
 import { MEDIA_ROOT } from './config';
 
 const ALLOWED_ROLES = new Set(['raw', 'processed', 'thumb']);
@@ -32,6 +34,7 @@ const VALID_LIST_STATUSES = new Set<string>([
 const OPERATOR_EMAIL_PLACEHOLDER = 'operator@local';
 
 @Controller()
+@UseGuards(AdminGuard)
 export class AdminController {
   @Get('admin/submissions')
   async list(@Query('status') status: string | undefined) {

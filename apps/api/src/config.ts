@@ -12,3 +12,5 @@ export const IP_HASH_SALT = process.env.IP_HASH_SALT ?? 'dev-salt-change-me';
 export const MAX_UPLOAD_BYTES = Number(
   process.env.MAX_UPLOAD_BYTES ?? 250 * 1024 * 1024,
 );
+
+export const ADMIN_TOKEN = process.env.ADMIN_TOKEN ?? '';

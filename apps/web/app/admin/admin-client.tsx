@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 type Asset = { storageKey: string; mime: string; bytes: number };
 type Stage = { id: string; name: string; order: number } | null;
@@ -85,22 +86,44 @@ const styles = {
 };
 
 export function AdminClient({ apiUrl }: { apiUrl: string }) {
+  const router = useRouter();
+  const [token, setToken] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>('pending');
   const [items, setItems] = useState<Submission[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  useEffect(() => {
+    const t = localStorage.getItem('rally.adminToken');
+    if (!t) {
+      router.replace('/admin/login');
+      return;
+    }
+    setToken(t);
+  }, [router]);
+
   const selected = useMemo(
     () => items.find((i) => i.id === selectedId) ?? null,
     [items, selectedId],
   );
 
+  const handle401 = useCallback(() => {
+    localStorage.removeItem('rally.adminToken');
+    router.replace('/admin/login');
+  }, [router]);
+
   const fetchList = useCallback(async () => {
+    if (!token) return;
     try {
       const res = await fetch(`${apiUrl}/admin/submissions?status=${tab}`, {
         cache: 'no-store',
+        headers: { Authorization: `Bearer ${token}` },
       });
+      if (res.status === 401) {
+        handle401();
+        return;
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: Submission[] = await res.json();
       setItems(data);
@@ -112,27 +135,35 @@ export function AdminClient({ apiUrl }: { apiUrl: string }) {
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'erro de rede');
     }
-  }, [apiUrl, tab]);
+  }, [apiUrl, tab, token, handle401]);
 
   useEffect(() => {
+    if (!token) return;
     fetchList();
     const t = setInterval(fetchList, 5000);
     return () => clearInterval(t);
-  }, [fetchList]);
+  }, [fetchList, token]);
 
   const moderate = useCallback(
     async (action: 'approve' | 'reject') => {
-      if (!selected || busy) return;
+      if (!selected || busy || !token) return;
       setBusy(true);
       try {
         const res = await fetch(
           `${apiUrl}/admin/submissions/${selected.id}/moderate`,
           {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
             body: JSON.stringify({ action }),
           },
         );
+        if (res.status === 401) {
+          handle401();
+          return;
+        }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         // optimistic: remove from local list and pick next
         setItems((prev) => {
@@ -148,8 +179,13 @@ export function AdminClient({ apiUrl }: { apiUrl: string }) {
         setBusy(false);
       }
     },
-    [apiUrl, selected, busy],
+    [apiUrl, selected, busy, token, handle401],
   );
+
+  const logout = useCallback(() => {
+    localStorage.removeItem('rally.adminToken');
+    router.replace('/admin/login');
+  }, [router]);
 
   // keyboard shortcuts
   useEffect(() => {
@@ -180,9 +216,12 @@ export function AdminClient({ apiUrl }: { apiUrl: string }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [items, tab, moderate]);
 
-  const mediaUrl = selected?.asset
-    ? `${apiUrl}/media/${selected.asset.storageKey}`
-    : null;
+  const mediaUrl =
+    selected?.asset && token
+      ? `${apiUrl}/media/${selected.asset.storageKey}?t=${encodeURIComponent(token)}`
+      : null;
+
+  if (!token) return null;
 
   return (
     <div style={styles.shell}>
@@ -195,9 +234,25 @@ export function AdminClient({ apiUrl }: { apiUrl: string }) {
             </button>
           ))}
         </div>
-        <div style={{ marginLeft: 'auto', color: 'var(--muted)', fontSize: '0.8rem' }}>
-          {items.length} {items.length === 1 ? 'item' : 'itens'}
-          {err ? ` · erro: ${err}` : ''}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>
+            {items.length} {items.length === 1 ? 'item' : 'itens'}
+            {err ? ` · erro: ${err}` : ''}
+          </span>
+          <button
+            onClick={logout}
+            style={{
+              background: 'transparent',
+              color: 'var(--muted)',
+              border: '1px solid var(--border)',
+              borderRadius: 6,
+              padding: '0.25rem 0.6rem',
+              fontSize: '0.75rem',
+              cursor: 'pointer',
+            }}
+          >
+            sair
+          </button>
         </div>
       </div>
 
