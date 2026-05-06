@@ -21,6 +21,7 @@ import type { Response } from 'express';
 import { existsSync } from 'fs';
 import { unlink } from 'fs/promises';
 import { join, normalize, resolve } from 'path';
+import { URL } from 'url';
 import { AdminGuard } from './admin.guard';
 import { MEDIA_ROOT } from './config';
 
@@ -31,6 +32,20 @@ const VALID_LIST_STATUSES = new Set<string>([
   'rejected',
   'aired',
 ]);
+
+function parseRallyId(input: string): string | null {
+  const trimmed = (input ?? '').trim();
+  if (!trimmed) return null;
+  if (/^\d+$/.test(trimmed)) return trimmed;
+  try {
+    const url = new URL(trimmed);
+    const id =
+      url.searchParams.get('rallyId') ?? url.searchParams.get('rally') ?? '';
+    return /^\d+$/.test(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
 
 // TODO: replace with Cloudflare Access JWT email when added in Sprint 2
 const OPERATOR_EMAIL_PLACEHOLDER = 'operator@local';
@@ -147,6 +162,115 @@ export class AdminController {
     await prisma.submission.delete({ where: { id } });
 
     return { id, deleted: true };
+  }
+
+  @Get('admin/events')
+  async listEvents() {
+    const events = await prisma.event.findMany({
+      orderBy: { startsAt: 'desc' },
+      include: {
+        _count: { select: { submissions: true, stages: true } },
+      },
+    });
+    return events.map((e) => ({
+      id: e.id,
+      slug: e.slug,
+      name: e.name,
+      startsAt: e.startsAt,
+      endsAt: e.endsAt,
+      active: e.active,
+      stagesCount: e._count.stages,
+      submissionsCount: e._count.submissions,
+    }));
+  }
+
+  @Post('admin/events/import')
+  async importEvent(@Body() body: { rallyId?: string; activate?: boolean }) {
+    const id = parseRallyId(body?.rallyId ?? '');
+    if (!id) throw new BadRequestException('rallyId inválido (número ou URL com ?rallyId=...)');
+
+    const url = `https://api.azlourenco.work/api/info/${id}.json`;
+    let json: any;
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+      if (res.status === 404) throw new BadRequestException(`Rally ${id} não existe na API anube`);
+      if (!res.ok) throw new BadRequestException(`API anube devolveu ${res.status}`);
+      json = await res.json();
+    } catch (err) {
+      if (err instanceof BadRequestException) throw err;
+      throw new BadRequestException(`Erro a contactar API anube: ${(err as Error).message}`);
+    }
+
+    const data = json?.event?.data;
+    if (!data?.name) throw new BadRequestException('Resposta da API anube sem dados');
+
+    const slug = `anube-${id}`;
+    const startsAt = new Date(Number(data.ut_ini) * 1000);
+    const endsAt = new Date(Number(data.ut_fin) * 1000);
+
+    const allSpecials: any[] = [];
+    for (const itin of data.itineraries ?? []) {
+      for (const s of itin.specials ?? []) {
+        if (s?.compute === 1) allSpecials.push(s);
+      }
+    }
+    allSpecials.sort((a, b) => (a.ut_ini ?? 0) - (b.ut_ini ?? 0));
+
+    const event = await prisma.event.upsert({
+      where: { slug },
+      update: { name: data.name, startsAt, endsAt },
+      create: { slug, name: data.name, startsAt, endsAt, active: false },
+    });
+
+    let order = 1;
+    for (const s of allSpecials) {
+      const stageSlug = String(s.special_name ?? `s-${s.id}`).toLowerCase();
+      const stageName = s.name_extra
+        ? `${s.special_name} — ${s.name_extra}`
+        : String(s.special_name ?? `Stage ${order}`);
+      const scheduledAt = s.ut_ini ? new Date(Number(s.ut_ini) * 1000) : null;
+      await prisma.stage.upsert({
+        where: { eventId_slug: { eventId: event.id, slug: stageSlug } },
+        update: { name: stageName, order, scheduledAt },
+        create: { eventId: event.id, slug: stageSlug, name: stageName, order, scheduledAt },
+      });
+      order++;
+    }
+
+    if (body?.activate) {
+      await prisma.$transaction([
+        prisma.event.updateMany({ where: { active: true }, data: { active: false } }),
+        prisma.event.update({ where: { id: event.id }, data: { active: true } }),
+      ]);
+    }
+
+    return {
+      id: event.id,
+      slug,
+      name: event.name,
+      stagesCount: allSpecials.length,
+      activated: body?.activate === true,
+    };
+  }
+
+  @Post('admin/events/:id/active')
+  async setActive(@Param('id') id: string) {
+    const ev = await prisma.event.findUnique({ where: { id } });
+    if (!ev) throw new NotFoundException('event not found');
+    await prisma.$transaction([
+      prisma.event.updateMany({ where: { active: true }, data: { active: false } }),
+      prisma.event.update({ where: { id }, data: { active: true } }),
+    ]);
+    return { id, active: true };
+  }
+
+  @Post('admin/events/deactivate-all')
+  async deactivateAll() {
+    const r = await prisma.event.updateMany({
+      where: { active: true },
+      data: { active: false },
+    });
+    return { deactivated: r.count };
   }
 
   @Get('media/:role/:filename')

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -268,6 +269,20 @@ export function AdminClient({ apiUrl }: { apiUrl: string }) {
             </button>
           ))}
         </div>
+        <Link
+          href="/admin/events"
+          style={{
+            marginLeft: '1rem',
+            color: 'var(--muted)',
+            fontSize: '0.85rem',
+            textDecoration: 'none',
+            border: '1px solid var(--border)',
+            borderRadius: 6,
+            padding: '0.4rem 0.85rem',
+          }}
+        >
+          Eventos
+        </Link>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <span style={{ color: 'var(--muted)', fontSize: '0.8rem' }}>
             {items.length} {items.length === 1 ? 'item' : 'itens'}
