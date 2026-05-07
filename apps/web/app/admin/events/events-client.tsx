@@ -137,6 +137,18 @@ export function EventsClient({ apiUrl }: { apiUrl: string }) {
     }
   }
 
+  async function deactivate(id: string) {
+    try {
+      const res = await authedFetch(`/admin/events/${id}/deactivate`, { method: 'POST' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      await refresh();
+    } catch (e) {
+      if ((e as Error).message !== 'unauthenticated') {
+        setErr((e as Error).message);
+      }
+    }
+  }
+
   async function deactivateAll() {
     try {
       const res = await authedFetch('/admin/events/deactivate-all', { method: 'POST' });
@@ -333,7 +345,22 @@ export function EventsClient({ apiUrl }: { apiUrl: string }) {
                     {ev.submissionsCount} envios · <code>{ev.slug}</code>
                   </div>
                 </div>
-                {!ev.active && (
+                {ev.active ? (
+                  <button
+                    onClick={() => deactivate(ev.id)}
+                    style={{
+                      background: 'transparent',
+                      color: 'var(--muted)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 6,
+                      padding: '0.4rem 0.8rem',
+                      fontSize: '0.8rem',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Desactivar
+                  </button>
+                ) : (
                   <button
                     onClick={() => setActive(ev.id)}
                     style={{

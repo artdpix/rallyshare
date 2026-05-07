@@ -15,7 +15,6 @@ import {
   prisma,
   SubmissionStatus,
   ModerationAction,
-  AssetRole,
 } from '@rally/db';
 import type { Response } from 'express';
 import { existsSync } from 'fs';
@@ -172,7 +171,7 @@ export class AdminController {
         _count: { select: { submissions: true, stages: true } },
       },
     });
-    return events.map((e) => ({
+    return events.map((e: (typeof events)[number]) => ({
       id: e.id,
       slug: e.slug,
       name: e.name,
@@ -209,12 +208,12 @@ export class AdminController {
     const endsAt = new Date(Number(data.ut_fin) * 1000);
 
     const allSpecials: any[] = [];
-    for (const itin of data.itineraries ?? []) {
-      for (const s of itin.specials ?? []) {
+    for (const itin of (data.itineraries ?? []) as any[]) {
+      for (const s of (itin.specials ?? []) as any[]) {
         if (s?.compute === 1) allSpecials.push(s);
       }
     }
-    allSpecials.sort((a, b) => (a.ut_ini ?? 0) - (b.ut_ini ?? 0));
+    allSpecials.sort((a: any, b: any) => (a.ut_ini ?? 0) - (b.ut_ini ?? 0));
 
     const event = await prisma.event.upsert({
       where: { slug },
@@ -262,6 +261,14 @@ export class AdminController {
       prisma.event.update({ where: { id }, data: { active: true } }),
     ]);
     return { id, active: true };
+  }
+
+  @Post('admin/events/:id/deactivate')
+  async deactivate(@Param('id') id: string) {
+    const ev = await prisma.event.findUnique({ where: { id } });
+    if (!ev) throw new NotFoundException('event not found');
+    await prisma.event.update({ where: { id }, data: { active: false } });
+    return { id, active: false };
   }
 
   @Post('admin/events/deactivate-all')
